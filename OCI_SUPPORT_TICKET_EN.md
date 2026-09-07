@@ -173,6 +173,69 @@ When OCI Support offered a live chat before opening a formal SR, we provided the
 >
 > What I'd love help with: can someone check, from OCI's internal view, whether this Function's secondary VNIC is actually able to route to other private IPs in the VCN at all, or whether there's a platform-side gap here? I'm happy to share the exact resource OCIDs (VCN, both subnets, both Functions Applications, the Compute instance, the NSG, request IDs and timestamps of failed invocations) — I have them all written up already.
 
+## 10. Second OCI Support Response — `172.17.0.0/16` Known Issue Re-check (2026-09-07)
+
+OCI Support again pointed to the known issue where a Function fails to reach a VM whose subnet CIDR is `172.17.0.0/16` (conflicting with the internal Docker bridge network OCI Functions uses), and asked for the Function subnet CIDR, Compute subnet CIDR, and route/security list rules again in detail. We replied:
+
+> Thanks. To be clear upfront: our Compute VM's subnet CIDR is `10.0.0.0/24`, not `172.17.0.0/16` — so this doesn't appear to be the known Docker-bridge-conflict issue you mentioned. Our entire VCN is `10.0.0.0/16`; nothing in our environment touches `172.17.0.0/16`. I want to flag that clearly since it's the main known issue that matches this symptom.
+>
+> Here are the exact details you asked for:
+>
+> | Item | Value |
+> |---|---|
+> | Function subnet CIDR (config A - public) | `10.0.1.0/24` |
+> | Function subnet CIDR (config B - private) | `10.0.2.0/24` |
+> | Compute (target VM) subnet CIDR | `10.0.0.0/24` |
+> | VCN CIDR (all of the above) | `10.0.0.0/16` |
+>
+> **Route table on the Function subnet:**
+> - Config A (public): 1 rule — `0.0.0.0/0 → Internet Gateway`
+> - Config B (private): 2 rules — `0.0.0.0/0 → NAT Gateway`, `all-icn-services-in-oracle-services-network (SERVICE_CIDR_BLOCK) → Service Gateway`
+>
+> **Security List on the Function subnet** (same list is shared with the Compute subnet too):
+> - Ingress: TCP 22, 80, 443, 3306, 8000, 8080, 8085–8088, all from `0.0.0.0/0`
+> - Egress: all protocols, all ports, to `0.0.0.0/0` (stateful, `is-stateless: false`) — this is broader than the "egress to All Services in Oracle Services Network" requirement mentioned, so that should already be covered.
+>
+> We also confirmed:
+> - The Function subnet needs a Service Gateway route rule if it must reach internal OCI services — we already have this in Config B and it makes no difference.
+> - We already tried both a public subnet (no NAT/SGW at all) and a fully compliant private subnet (NAT Gateway + Service Gateway route rules) — identical failure in both.
+>
+> Given none of the standard causes (Security List, NSG, subnet type, route table, the `172.17.0.0/16` conflict) apply here, could someone look at this from OCI's internal side — specifically whether this Function's secondary VNIC can route to another private IP in the same VCN at all? Happy to provide the exact OCIDs/request IDs again if useful.
+
+## 11. Third OCI Support Response — Same Clarification Requested Again (2026-09-07)
+
+OCI Support asked for the same networking details a third time (private/public subnet, route table, Security List/NSG rules, attached gateways) and asked us to confirm which specific topic we needed help with. We replied with a compact summary table marking everything already verified, to avoid repeating the same screening loop:
+
+> I understand you need the full picture, but I want to flag that I've already provided all of this in detail twice in this thread. To save us both time, here it is once more in the most compact form, with what's already been verified marked clearly:
+>
+> | Question | Answer | Status |
+> |---|---|---|
+> | Is the Function in a private subnet? | Tested **both** — a public subnet (Internet Gateway) and a purpose-built private subnet (NAT Gateway + Service Gateway) | ✅ Both fail identically |
+> | Function subnet route table | Public: `0.0.0.0/0 → IGW`. Private: `0.0.0.0/0 → NAT GW`, `all-icn-services-in-oracle-services-network → Service GW` | ✅ Verified |
+> | Security List (both subnets, shared list) | Ingress: TCP 22/80/443/3306/8000/8080/8085-8088 from `0.0.0.0/0`. Egress: all protocols to `0.0.0.0/0` | ✅ Already permissive, ruled out |
+> | NSG on Compute VM's VNIC | Added explicit TCP 3306 ingress rule from both Function subnets, retested | ✅ Ruled out — same error persists |
+> | Gateways attached to VCN | Internet Gateway (pre-existing) + NAT Gateway + Service Gateway (both added by us for this test) | ✅ All present, all tested |
+> | Compute subnet CIDR | `10.0.0.0/24`, part of `10.0.0.0/16` — **not** `172.17.0.0/16` | ✅ Ruled out the known Docker-bridge conflict |
+> | MySQL binding | `0.0.0.0:3306`, confirmed listening on all interfaces | ✅ Not a bind issue |
+>
+> To directly answer your topic question: this is specifically about "Functions access to private IPs in the same VCN." We've already eliminated NSG/security list requirements, subnet routing, and the known `172.17.0.0/16` region-agnostic issue — none apply. We have NOT been able to test or verify anything region-specific to `ap-seoul-1`, since that's outside what we can check from the console/CLI — if there's a known regional issue, that would be new information for us.
+>
+> Given every customer-side item on the standard checklist has already been tested and ruled out, could this be escalated to someone who can inspect the Function's secondary VNIC routing from OCI's internal side? I have the exact resource OCIDs, request IDs, and timestamps ready to hand over.
+
+## 12. Critical New Finding — The Function's VNIC Cannot Route Outbound At All, Even to a Public IP (2026-09-07)
+
+To test whether this was specific to VCN-internal private-IP routing, we changed the Function's `DB_DIRECT_HOST` config value to the Compute instance's **public IP** (`193.123.234.59:3306`) instead of its private IP (`10.0.0.14:3306`), keeping the Function on its existing public-subnet configuration (Section 4-A). The Compute instance's Security List already allows TCP 3306 from `0.0.0.0/0`, and MySQL is bound to `0.0.0.0`, so this should be reachable exactly like any normal internet client (e.g., the same way we SSH into this same instance from outside).
+
+**Two attempts, in sequence:**
+
+1. **First attempt**: the client (our own `oci fn function invoke` CLI) disconnected after 44.1 seconds — server-side log: `Served function invocation request in 44.100 seconds with error code 444 - StatusConnectionClosedWithoutResponse (444): Client request aborted`. This looked like a silent packet drop (not an explicit reject), so we checked the Compute instance's NSG and found its TCP 3306 ingress rule only allowed the two Function-subnet CIDRs (`10.0.1.0/24`, `10.0.2.0/24`) — not `0.0.0.0/0`. Since the Function's public-egress source IP wouldn't match either, we added an explicit `0.0.0.0/0` TCP 3306 NSG ingress rule to match the Security List.
+
+2. **Second attempt** (fresh container, confirmed new `containerId`, confirmed updated config was applied): **`java.net.NoRouteToHostException: No route to host` again, failing in 3.559 seconds** — the exact same failure signature as every private-IP test in Sections 3–4.
+
+**This changes our diagnosis.** We originally assumed the problem was specific to the Function's secondary VNIC being unable to reach *other private IPs inside the same VCN*. This result shows the same VNIC also cannot successfully reach a **public, internet-routable IP** — which should traverse the subnet's ordinary `0.0.0.0/0 → Internet Gateway` route rule, a path we already independently confirmed exists and is correctly configured (Section 4-A). This suggests the Function's secondary VNIC may not be able to route outbound traffic **at all**, regardless of destination (private VCN IP or public internet IP) — a more fundamental problem than "can't reach VCN peers," and one that has nothing to do with Security Lists, NSGs, or subnet type, all of which we've now tested and correctly configured for both destinations.
+
+We are not aware of any further customer-side network configuration that could explain or fix this.
+
 ---
 
 *This document is for diagnostic purposes only. All values listed are identifiers (OCIDs, private IPs, etc.) — no passwords, API keys, or other credentials are included.*

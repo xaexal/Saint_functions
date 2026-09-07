@@ -1,0 +1,23 @@
+# AWS Lambda(컨테이너 이미지)용 Dockerfile. OCI용 Dockerfile과 동일한 원리로,
+# Spring Boot의 bootJar(중첩 fat-jar) 대신 plain jar + 의존성 jar를 평평한 디렉터리에
+# 모아서 Lambda 공식 베이스 이미지의 클래스패스 구조에 맞춘다.
+
+# ---- Build stage ----
+FROM eclipse-temurin:17-jdk AS build-stage
+WORKDIR /build
+
+COPY gradlew settings.gradle build.gradle ./
+COPY gradle ./gradle
+RUN chmod +x gradlew
+
+COPY src ./src
+
+RUN ./gradlew --no-daemon --console=plain build copyRuntimeDeps -x test
+
+# ---- Runtime stage ----
+FROM public.ecr.aws/lambda/java:17
+
+COPY --from=build-stage /build/build/libs/*-plain.jar ${LAMBDA_TASK_ROOT}/lib/
+COPY --from=build-stage /build/build/function-deps/*.jar ${LAMBDA_TASK_ROOT}/lib/
+
+CMD ["com.xaexal.app.Function.AwsLambdaHandler::handleRequest"]

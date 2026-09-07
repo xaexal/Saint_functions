@@ -54,6 +54,11 @@ implementation 'org.springframework.boot:spring-boot-starter-security'
     // OciFunctionHandler가 DispatcherServlet에 MockHttpServletRequest/Response로 위임하기 위해 필요
     // (기존에는 testImplementation으로만 있던 spring-test를 메인 코드에서도 쓰도록 승격)
     implementation 'org.springframework:spring-test'
+
+    // AwsLambdaHandler(AWS Lambda 브릿지)가 사용하는 AWS 공식 Spring Boot 3 서버리스 컨테이너 라이브러리.
+    // OCI Functions와 달리 AWS는 이 어댑터를 공식 제공하므로 OciFunctionHandler처럼 직접 만들 필요가 없다.
+    implementation 'com.amazonaws.serverless:aws-serverless-java-container-springboot3:2.1.5'
+    implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
 }
 
 compileJava {
@@ -79,4 +84,12 @@ tasks.register('runOciHandlerCheck', JavaExec) {
 	description = 'OciFunctionHandler를 Fn/Docker 없이 직접 호출해 DispatcherServlet 브릿지만 검증한다.'
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = 'com.xaexal.app.Function.OciFunctionHandlerManualCheck'
+}
+
+// AWS Lambda/API Gateway 없이 AwsLambdaHandler(aws-serverless-java-container 브릿지)만 단독으로 수동 검증하기 위한 태스크.
+tasks.register('runAwsHandlerCheck', JavaExec) {
+	group = 'verification'
+	description = 'AwsLambdaHandler를 AWS Lambda 없이 직접 호출해 aws-serverless-java-container 브릿지만 검증한다.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.xaexal.app.Function.AwsLambdaHandlerManualCheck'
 }

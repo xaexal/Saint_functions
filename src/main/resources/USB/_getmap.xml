@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><templates><template autoinsert="true" context="java" deleted="false" description="" enabled="true" name="_getmap">@GetMapping("/${cursor}")&#13;
+	public ResponseEntity&lt;Result&lt;?&gt;&gt; doGet(@RequestParam Map&lt;String,String&gt; req,HttpSession sess){&#13;
+		System.out.println("/${value} GET");&#13;
+		req.forEach((paramName, paramValue) -&gt; {&#13;
+		    System.out.println("- "+paramName + " [" + paramValue + "]");&#13;
+		});&#13;
+		try {&#13;
+			return ResponseEntity.ok(new Result&lt;List&lt;Member&gt;&gt;(1,"",members));&#13;
+		} catch(Exception e) {&#13;
+			return ResponseEntity.ok(new Result&lt;&gt;(-1,e.getMessage()));&#13;
+		}&#13;
+	}</template></templates>

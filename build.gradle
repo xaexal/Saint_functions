@@ -1,0 +1,82 @@
+
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.4.2'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+group = 'com.xaexal'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    compileOnly 'org.projectlombok:lombok'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    annotationProcessor 'org.projectlombok:lombok'
+    implementation 'org.springframework.boot:spring-boot-starter-tomcat'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation 'com.googlecode.json-simple:json-simple:1.1.1'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'com.jcraft:jsch:0.1.55'
+    implementation 'jakarta.annotation:jakarta.annotation-api:2.1.1'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
+    // ✅ AWS SDK v2 (버전 통일)
+    implementation "software.amazon.awssdk:s3:2.25.66"
+
+    // JSON 처리
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    // OCI Functions 브릿지(OciFunctionHandler)가 HTTPGatewayContext를 사용하기 위한 Fn Java FDK.
+    // runtime 아티팩트는 fnproject/fn-java-fdk 런타임 이미지 자체에 이미 포함되어 있어 번들하지 않는다.
+    implementation 'com.fnproject.fn:api:1.1.22'
+
+    // OciFunctionHandler가 DispatcherServlet에 MockHttpServletRequest/Response로 위임하기 위해 필요
+    // (기존에는 testImplementation으로만 있던 spring-test를 메인 코드에서도 쓰도록 승격)
+    implementation 'org.springframework:spring-test'
+}
+
+compileJava {
+	options.compilerArgs << '-parameters'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// OCI Functions 컨테이너는 Spring Boot의 중첩(bootJar) fat-jar 구조를 이해하지 못하므로,
+// plain jar(우리 클래스만 포함) + 의존성 jar들을 평평한 디렉터리로 모아 Fn 런타임의 flat classpath로 사용한다.
+// Dockerfile의 build stage에서 `./gradlew build copyRuntimeDeps`로 함께 실행된다.
+tasks.register('copyRuntimeDeps', Copy) {
+	from configurations.runtimeClasspath
+	into "${buildDir}/function-deps"
+}
+
+// Fn/Docker/OCI 없이 OciFunctionHandler(DispatcherServlet 브릿지)만 단독으로 수동 검증하기 위한 태스크.
+// 예: ./gradlew runOciHandlerCheck -Dapp.datasource.mode=tunnel (환경변수는 secrets.properties로 이미 주입됨)
+tasks.register('runOciHandlerCheck', JavaExec) {
+	group = 'verification'
+	description = 'OciFunctionHandler를 Fn/Docker 없이 직접 호출해 DispatcherServlet 브릿지만 검증한다.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.xaexal.app.Function.OciFunctionHandlerManualCheck'
+}

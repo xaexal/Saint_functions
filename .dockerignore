@@ -1,0 +1,11 @@
+.git
+.gradle
+.vscode
+.settings
+.classpath
+.project
+build
+bin
+secrets.properties
+*.pem
+*.p12

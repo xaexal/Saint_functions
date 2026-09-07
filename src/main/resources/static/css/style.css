@@ -1,0 +1,97 @@
+@import url(//fonts.googleapis.com/earlyaccess/nanumgothic.css);
+
+#whether {
+    cursor:pointer;
+}
+
+.laser {
+  animation: blink 2s infinite;
+  -webkit-animation: blink 2s infinite;
+  -moz-animation: blink 2s infinite;
+}
+
+table.border {
+	border-collapse:collapse;
+	background-color:white;
+}
+td.border,th.border {
+    border:1px solid grey;
+	cursor:pointer;
+}
+@import url(//fonts.googleapis.com/earlyaccess/nanumgothic.css);
+td.student {
+    background-color:yellow;
+    width:120px;height:120px;
+    border:1px solid pink;
+    /* text-align:left;
+    text-valign:top; */
+}
+span.lu {
+    float: left;
+    margin-left: 5px;
+	margin-top: -85px;
+	font-size:10px;
+}
+span.rd {
+	float:right;
+	margin-left:100px;
+	margin-top:100px;
+	font-size:8px;
+}
+a {
+	text-decoration:underline;
+	cursor:pointer;
+}
+td.checking {
+	background-color:magenta;
+	color:yellow;
+	font-weight:bold;
+	cursor:pointer;
+	border: 1px solid grey;
+}
+td.done {
+	background-color:green;
+	color:yellow;
+	font-weight:bold;
+	cursor:pointer;
+	border: 1px solid grey;
+}
+td.working {
+	background-color:white;
+	border: 1px solid grey;
+	font-weight:normal;
+	cursor:pointer;
+}
+@-webkit-keyframes blink {
+  50% {
+    background: #cc5;
+    background-size: 75px 150px;
+  }
+}
+
+td.palm,a.palm {
+	cursor:pointer;
+	font-weight:bold;
+	font-size:24px
+}
+@-moz-keyframes blink {
+  50% {
+    background: #cc5;
+    background-size: 75px 150px;
+  }
+}
+
+.first-col {
+	border-top:1px solid green;
+}	
+.left-col {
+	text-align:right;
+	border-left:1px solid green;
+	border-right:1px solid green;
+	border-bottom:1px solid green;
+}
+.right-col {
+	text-align:left;
+	border-right:1px solid green;
+	border-bottom:1px solid green;
+}

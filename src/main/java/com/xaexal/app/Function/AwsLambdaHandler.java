@@ -22,8 +22,11 @@ import com.xaexal.app.SaintApplication;
  * DispatcherServlet에 위임)로 동작하므로, 여기서는 그 라이브러리를 얇게 감싸기만 한다.
  * Controller/Service 코드는 이번에도 무변경.
  *
- * 알려진 한계는 OciFunctionHandler와 동일하다: Spring Security의 서블릿 필터 체인은
- * 이 경로로 호출되지 않으므로 OAuth2 로그인 엔드포인트는 별도 후속 작업이 필요하다.
+ * OciFunctionHandler와 달리 이 라이브러리는 Spring Security의 서블릿 필터 체인까지 그대로
+ * 통과시킨다(실측 확인, 2026-09-10) — OAuth2 로그인(/oauth2/authorization/{registrationId})도
+ * 별도 작업 없이 정상 동작한다. 단, Kakao/Naver의 redirect-uri는 application.properties에서
+ * Google처럼 `{baseUrl}/login/oauth2/code/{registrationId}` 템플릿을 써야 API Gateway
+ * 도메인으로 정확히 해석된다(하드코딩된 https://localhost:8443 값이면 그 값 그대로 나감).
  */
 public class AwsLambdaHandler implements RequestStreamHandler {
 

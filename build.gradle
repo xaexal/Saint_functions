@@ -39,6 +39,7 @@ dependencies {
 
     // ✅ AWS SDK v2 (버전 통일)
     implementation "software.amazon.awssdk:s3:2.25.66"
+    implementation "software.amazon.awssdk:secretsmanager:2.25.66"
 
     // JSON 처리
     implementation 'com.fasterxml.jackson.core:jackson-databind'

@@ -65,6 +65,9 @@ RDS 전환 후에도 콜드스타트가 여전히 **약 24초**(2회 반복 테�
 - Google/Kakao/Naver 콘솔에 새 콜백 URL(`.../login/oauth2/code/{provider}`) 추가 등록 완료(2026-09-11, 사용자가 직접 진행)
 - **효과**: API Gateway의 30초 하드 타임아웃이 없어져서, 콜드스타트가 길어져도(실측 21초) 더 이상 503 위험이 없음(Lambda 자체 타임아웃 120초까지 그대로 기다림)
 
+### TrailingSlashFilter 목록 누락분 추가 발견/수정 (2026-09-11)
+브라우저로 Enrollment 컴포넌트 진입 시 `/lov` 400 재현 — `TrailingSlashFilter`의 고정 경로 목록에 `/lov`가 빠져있었음(클래스 레벨 `@RequestMapping` 없이 메소드에 직접 `"/lov/"`를 박아둔 패턴이라 최초 스캔 때 놓침). "실패하면 자동으로 슬래시 붙여 재시도"하는 범용 방식으로 바꿔보려 했으나, 이 Lambda 서블릿 브릿지(aws-serverless-java-container) 환경에서 `RequestDispatcher.forward()`도, `ContentCachingResponseWrapper`로 감싸고 필터체인을 두 번 태우는 방식도 전부 실패(원인 불명, 표준 서블릿 스펙을 완전히 구현하지 않는 것으로 추정) — 결국 신뢰도 높은 고정 목록 방식으로 복귀하되, 이번엔 클래스 레벨+메소드 레벨 매핑을 전수조합해서 끝이 `/`로 끝나는 실제 경로를 빠짐없이 재조사해 반영함. **새 컨트롤러를 `"/xxx/"`로 끝나는 매핑으로 추가할 때는 `TrailingSlashFilter.BASE_PATHS`에도 반드시 추가해야 함.**
+
 ### 4단계 — 실제 컷오버 (사용자가 별도로 시점 결정)
 - OCI DB에 대한 쓰기를 멈추는 시점 확정
 - 그 시점의 최종 데이터를 RDS로 다시 이전(최신화)

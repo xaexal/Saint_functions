@@ -52,6 +52,19 @@ RDS 전환 후에도 콜드스타트가 여전히 **약 24초**(2회 반복 테�
 - API Gateway 하드 타임아웃(30초)까지 여유가 6초 정도로 줄었을 뿐, 근본적으로 해소되진 않음 — 동시 요청이 몰리거나 조금만 더 느려지면 다시 503이 날 수 있음.
 - **가능한 추가 해결책(아직 미착수, 사용자 결정 필요)**: (1) Lambda 메모리를 늘려 CPU 할당량 증가(간단/저비용, 효과 미검증), (2) AWS Lambda SnapStart(Java 전용, JVM 콜드스타트를 스냅샷으로 우회 — 가장 근본적이지만 적용 조건/제약 검토 필요), (3) Provisioned Concurrency(이전에 논의됐던 방법, 상시 비용 발생).
 
+## API Gateway 완전 제거, Lambda 함수 URL로 전환 (2026-09-11)
+
+브라우저 실사용 테스트 중 `/rolepermissions`, `/preferences` 등 40여 개 엔드포인트가 400으로 실패하는 문제를 발견 — API Gateway가 요청 경로 끝의 `/`를 제거해서 전달하는데(클라이언트가 슬래시를 보내도 재현됨), Spring Boot 3는 `/xxx`와 `/xxx/`를 엄격히 구분해서 `@RequestMapping(클래스)+@GetMapping("/")` 패턴(31개 파일)이 전부 깨짐. 컨트롤러 개별 수정 대신 `Common/TrailingSlashFilter.java`(영향받는 30개 기본 경로를 고정 목록으로 두고 끝에 `/`를 붙여 재시도)로 한 번에 해결.
+
+이 과정에서 API Gateway의 근본적인 두 가지 한계(경로 정규화 문제, 30초 하드 타임아웃)를 재확인하고, **API Gateway 자체를 없애고 Lambda 함수 URL로 전환**하기로 결정(사용자 지시). 변경 내용:
+- `AwsLambdaHandler.java`: `getAwsProxyHandler()`(페이로드 포맷 1.0) → `getHttpApiV2ProxyHandler()`(포맷 2.0, Function URL과 동일 포맷)로 교체. 요청 타입만 `AwsProxyRequest`→`HttpApiV2ProxyRequest`로 바뀌고 응답 타입(`AwsProxyResponse`)과 Controller/Service 코드는 무변경.
+- Lambda 함수 URL 생성(`https://hpfstg34v75f7lststazsefxoy0vfatb.lambda-url.ap-northeast-2.on.aws`), AuthType=NONE(공개 접근)
+- **실측 트러블슈팅**: AuthType=NONE + `lambda:InvokeFunctionUrl` 권한만 부여했는데도 403 Forbidden 지속 — AWS가 **2025년 10월부터 Function URL에 `lambda:InvokeFunctionUrl`과 `lambda:InvokeFunction` 두 권한을 모두 요구**하도록 정책을 바꿨음(공식 문서로 확인). `--invoked-via-function-url` 조건으로 `lambda:InvokeFunction` 권한을 추가로 부여해서 해결.
+- API Gateway HTTP API(`hgdk4a0y46`) 완전 삭제 + 관련 Lambda 리소스 정책 정리
+- 프론트엔드 `.env`의 `REACT_APP_API_BASE_URL`을 새 Function URL로 갱신
+- Google/Kakao/Naver 콘솔에 새 콜백 URL(`.../login/oauth2/code/{provider}`) 추가 등록 완료(2026-09-11, 사용자가 직접 진행)
+- **효과**: API Gateway의 30초 하드 타임아웃이 없어져서, 콜드스타트가 길어져도(실측 21초) 더 이상 503 위험이 없음(Lambda 자체 타임아웃 120초까지 그대로 기다림)
+
 ### 4단계 — 실제 컷오버 (사용자가 별도로 시점 결정)
 - OCI DB에 대한 쓰기를 멈추는 시점 확정
 - 그 시점의 최종 데이터를 RDS로 다시 이전(최신화)
@@ -63,3 +76,6 @@ RDS 전환 후에도 콜드스타트가 여전히 **약 24초**(2회 반복 테�
 - NAT Gateway 비용 감수 여부 (필요성 자체는 0단계에서 확정됨 — 시간당 과금+데이터 처리 요금 발생)
 - 컷오버 시점
 - 원본 Saint / OCI Compute VM의 최종 처리 방법과 시점
+- 작업 중 채팅에 노출된 시크릿(Lambda 환경변수 전체, 카카오 REST API키/클라이언트 시크릿) 교체 여부
+- `AWS_ACCESS_KEY_ID`/`AWS_SECRET_KEY`가 root 계정 키인 문제 별도 해결 — [[project_saint_aws_root_key_debt]]
+- 콜드스타트 자체(21~24초)를 더 줄일지(Lambda 메모리 추가 증설/SnapStart) — 503 위험은 없어졌으니 급하지 않음

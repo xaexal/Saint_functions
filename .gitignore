@@ -45,3 +45,7 @@ secrets.properties
 upload/20250907172800.jpg
 upload/20250907172948.jpg
 deps.txt
+
+# JVM crash dumps (Gradle daemon OOM 등)
+hs_err_pid*.log
+replay_pid*.log

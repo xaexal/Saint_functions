@@ -11,8 +11,8 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 
 /**
  * AwsLambdaHandler(aws-serverless-java-container 브릿지)만 단독으로 검증하기 위한 수동 테스트 도구.
- * 실제 AWS Lambda/API Gateway 없이, API Gateway REST API가 Lambda 프록시 통합으로 보내는
- * JSON 이벤트 포맷을 직접 만들어서 흘려보고 응답을 확인한다.
+ * 실제 AWS Lambda/Function URL 없이, Lambda 함수 URL이 보내는 것과 같은 구조(API Gateway HTTP API
+ * 페이로드 포맷 2.0)의 JSON 이벤트를 직접 만들어서 흘려보고 응답을 확인한다.
  *
  * 실행: ./gradlew runAwsHandlerCheck (build.gradle 참고)
  * DB는 tunnel 모드로 붙도록 APP_DATASOURCE_MODE=tunnel 등 환경변수를 넘겨서 실행해야 한다.
@@ -20,20 +20,19 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 public class AwsLambdaHandlerManualCheck {
 
     private static final String REQUEST_EVENT_JSON = "{"
-            + "\"httpMethod\":\"GET\","
-            + "\"path\":\"/\","
-            + "\"resource\":\"/\","
-            + "\"headers\":{\"Host\":\"localhost\"},"
-            + "\"multiValueHeaders\":{\"Host\":[\"localhost\"]},"
-            + "\"queryStringParameters\":null,"
-            + "\"pathParameters\":null,"
+            + "\"version\":\"2.0\","
+            + "\"routeKey\":\"$default\","
+            + "\"rawPath\":\"/\","
+            + "\"rawQueryString\":\"\","
+            + "\"headers\":{\"host\":\"localhost\"},"
             + "\"isBase64Encoded\":false,"
             + "\"requestContext\":{"
-            +   "\"httpMethod\":\"GET\","
-            +   "\"stage\":\"test\","
+            +   "\"http\":{\"method\":\"GET\",\"path\":\"/\",\"protocol\":\"HTTP/1.1\",\"sourceIp\":\"127.0.0.1\",\"userAgent\":\"manual-check\"},"
             +   "\"requestId\":\"manual-check-request-id\","
-            +   "\"resourcePath\":\"/\","
-            +   "\"identity\":{\"sourceIp\":\"127.0.0.1\"}"
+            +   "\"routeKey\":\"$default\","
+            +   "\"stage\":\"$default\","
+            +   "\"time\":\"01/Jan/2026:00:00:00 +0000\","
+            +   "\"timeEpoch\":0"
             + "}"
             + "}";
 
